@@ -8,10 +8,6 @@ class Agent:
         self.x = x
         self.y = y
 
-        self.age = 0
-        # maximum age for agents (preys and predators)
-        self.max_age = 100
-
         # energy will go down during the simulation, and if it reaches 0, the agent dies
         self._energy = 100
         self.energy_max = 150
@@ -127,14 +123,6 @@ class Prey(Agent):
     def __init__(self, x, y):
         super().__init__(x, y)
         self.speed = 1.0
-
-    @property
-    def energy(self):
-        if self._energy < 0:
-            self._energy = 0
-        elif self._energy > self.energy_max:
-            self._energy = self.energy_max
-        return self._energy
     
 
     def runaway(self, world):
@@ -175,14 +163,13 @@ class Prey(Agent):
 
         # prey gain energy over time (herbivore)
         self.energy += 1
-        self.age += 1
 
 #############################
 class Predator(Agent):
 
     def __init__(self, x, y):
         super().__init__(x, y)
-        self.speed = 1.2
+        self.speed = 2.0
 
     def hunt(self, world):
         """
@@ -217,6 +204,5 @@ class Predator(Agent):
         else:
             self.move(world)
 
-        # predators lose energy when moving, and they age
+        # predators lose energy when moving
         self.energy -= 2
-        self.age += 1

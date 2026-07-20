@@ -117,16 +117,19 @@ class World:
                             prey.countdown = 3
                             # male
                             other_prey.countdown = 1
+
+                            prey.energy -= prey.reproduction_energy_cost
+                            other_prey.energy -= other_prey.reproduction_energy_cost
     
     # Remove dead agents from the world
     def remove_dead(self):
-        # suppression of the dead (energy = 0) or aging (age = max_age)
+        # suppression of the dead (energy = 0)
         for predator in self.predators:
-            if predator.energy <= 0 or predator.age >= predator.max_age:
+            if predator.energy <= 0:
                 self.predators.remove(predator)
 
         for prey in self.preys:
-            if prey.energy <= 0 or prey.age >= prey.max_age:
+            if prey.energy <= 0:
                 self.preys.remove(prey)
 
     def step(self):
