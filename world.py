@@ -53,7 +53,12 @@ class World:
         if "position" in kwargs:
             self.predators.append(Predator(kwargs["position"][0], kwargs["position"][1]))
 
-
+    def remove_all_agents(self):
+        """
+        Remove all agents (preys and predators) from the world.
+        """
+        self.preys = []
+        self.predators = []
 
     def return_dict(self):
         """

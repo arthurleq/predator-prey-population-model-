@@ -9,7 +9,7 @@ class Agent:
         self.y = y
 
         # energy will go down during the simulation, and if it reaches 0, the agent dies
-        self._energy = 100
+        self._energy = np.random.uniform(1, 150)
         self.energy_max = 150
         self.reproduction_energy_needed = 120
         self.reproduction_energy_cost = 50
@@ -123,6 +123,8 @@ class Prey(Agent):
     def __init__(self, x, y):
         super().__init__(x, y)
         self.speed = 1.0
+        # distance at which the prey will run away from predators instead of looking for a mate
+        self.danger_distance = 10.0  
     
 
     def runaway(self, world):
@@ -139,6 +141,24 @@ class Prey(Agent):
                 distance_to_predators = distance
                 # Run away from the predator ( the opposite direction => + pi)
                 run_away_direction = direction + np.pi
+
+        # if the closest predator is too close, the prey will run away from it
+        if distance_to_predators < self.danger_distance or self.energy < self.reproduction_energy_needed:
+            # Run away from the closest predator
+            self.direction = run_away_direction
+        else:
+            # it looks for a near mate (with enough energy too)
+            for prey in world.preys:
+                # first we look for a mate with enough energy to reproduce
+                if prey.energy > prey.reproduction_energy_needed:
+                    # then we look for the closest mate
+                    distance, direction = self.get_distance(prey, world)
+                    if distance < distance_to_predators:
+                        distance_to_predators = distance
+                        # Move towards the mate
+                        run_away_direction = direction
+
+
             
         # We update the direction of the prey
         # using the setter method of the direction property 
@@ -162,34 +182,49 @@ class Prey(Agent):
             self.move(world)
 
         # prey gain energy over time (herbivore)
-        self.energy += 1
+        self.energy += 2
 
 #############################
 class Predator(Agent):
 
     def __init__(self, x, y):
         super().__init__(x, y)
-        self.speed = 2.0
+        self.speed = 1.5
 
     def hunt(self, world):
         """
         Detect prey in the world and change direction to hunt them.
         """
-        distance_to_prey = np.inf
+        distance_to_objectif = np.inf
         # default direction is the current direction of the predator
-        hunt_direction = self.direction
+        direction_to_objectif = self.direction
 
-        for prey in world.preys:
-            distance, direction = self.get_distance(prey, world)
-            if distance < distance_to_prey:
-                distance_to_prey = distance
-                # Move towards the prey
-                hunt_direction = direction
+        # if the predator has enough energy to reproduce, 
+        if self.energy > self.reproduction_energy_needed:
+            # it looks for a near mate (with enough energy too)
+            for predator in world.predators:
+                # first we look for a mate with enough energy to reproduce
+                if predator.energy > predator.reproduction_energy_needed:
+                    # then we look for the closest mate
+                    distance, direction = self.get_distance(predator, world)
+                    if distance < distance_to_objectif:
+                        distance_to_objectif = distance
+                        # Move towards the mate
+                        direction_to_objectif = direction
+        
+        # else, it looks for the closest prey
+        else:
+            for prey in world.preys:
+                distance, direction = self.get_distance(prey, world)
+                if distance < distance_to_objectif:
+                    distance_to_objectif = distance
+                    # Move towards the prey
+                    direction_to_objectif = direction
 
         # We update the direction of the predator
         # using the setter method of the direction property 
         # to ensure the maximum angular change is respected
-        self.direction = hunt_direction
+        self.direction = direction_to_objectif
 
     def update(self, world):
         # update the direction
@@ -205,4 +240,4 @@ class Predator(Agent):
             self.move(world)
 
         # predators lose energy when moving
-        self.energy -= 2
+        self.energy -= 1
