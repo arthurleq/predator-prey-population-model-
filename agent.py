@@ -11,9 +11,9 @@ class Agent:
 
         # energy will go down during the simulation, and if it reaches 0, the agent dies
         self._energy = energy if energy is not None else np.random.uniform(1, 150)
-        self.energy_max = 150
-        self.reproduction_energy_needed = 120
-        self.reproduction_energy_cost = 50
+        self._energy_max = 150
+        self._reproduction_energy_needed = 120
+        self._reproduction_energy_cost = 50
 
         # countdown is used to pause the agent when it is giving birth or eating
         self.countdown = 0
@@ -30,7 +30,18 @@ class Agent:
     @property
     def energy(self):
         return self._energy
-        
+
+    @property
+    def energy_max(self):
+        return self._energy_max
+
+    @property
+    def reproduction_energy_needed(self):
+        return self._reproduction_energy_needed
+
+    @property
+    def reproduction_energy_cost(self):
+        return self._reproduction_energy_cost
     
     @energy.setter
     def energy(self, value):

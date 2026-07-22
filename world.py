@@ -150,7 +150,7 @@ class World:
                         # Get the distance between the two predators
                         distance, _, vector_dx_dy = predator.get_distance(other_predator, self)
                         # if the predators are close enough AND both predators have enough energy
-                        if distance < self.distance_reproduction and (predator.energy > predator.reproduction_energy_needed and other_predator.energy > other_predator.reproduction_energy_needed):
+                        if distance < self.distance_reproduction and (predator.energy >= predator.reproduction_energy_needed and other_predator.energy >= other_predator.reproduction_energy_needed):
 
                                 # both predators lose some energy
                                 predator.energy -= predator.reproduction_energy_cost
@@ -177,7 +177,7 @@ class World:
 
                     distance, _, vector_dx_dy = prey.get_distance(other_prey, self)
                     # if the preys are close enough AND both preys have enough energy
-                    if distance < self.distance_reproduction and (prey.energy > prey.reproduction_energy_needed and other_prey.energy > other_prey.reproduction_energy_needed):
+                    if distance < self.distance_reproduction and (prey.energy >= prey.reproduction_energy_needed and other_prey.energy >= other_prey.reproduction_energy_needed):
                                 # new prey is born (between the two parents)
                                 x = (prey.x + vector_dx_dy[0] / 2) % self.width
                                 y = (prey.y + vector_dx_dy[1] / 2) % self.height
@@ -197,6 +197,15 @@ class World:
     # Remove dead agents from the world
     def remove_dead(self):
 
+        # number of prey removed
+        N_preys_removed = len(self.preys) - sum(prey.energy > 0 for prey in self.preys)
+
+        self.preys = [
+            prey
+            for prey in self.preys
+            if prey.energy > 0
+        ]
+        
         # number of predator removed
         N_predators_removed = len(self.predators) - sum(predator.energy > 0 for predator in self.predators)
 
@@ -206,16 +215,7 @@ class World:
                if predator.energy > 0
         ]
 
-        # number of prey removed
-        N_preys_removed = len(self.preys) - sum(prey.energy > 0 for prey in self.preys)
-
-        self.preys = [
-            prey
-            for prey in self.preys
-            if prey.energy > 0
-        ]
-
-        return N_predators_removed, N_preys_removed
+        return N_preys_removed, N_predators_removed
 
     def step(self):
         
@@ -233,7 +233,7 @@ class World:
         self.reproduction()
 
         # remove dead agents
-        N_predators_removed, N_preys_removed = self.remove_dead()
+        N_preys_removed, N_predators_removed = self.remove_dead()
 
         N_predators_added = len(self.list_predator_to_add)
         N_preys_added = len(self.list_prey_to_add)
