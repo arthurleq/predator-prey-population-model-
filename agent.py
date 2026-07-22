@@ -118,12 +118,28 @@ class Agent:
 ############################
 class Prey(Agent):
 
-    def __init__(self, x, y, world, energy=None,):
+    def __init__(self, x, y, world, energy=None):
         super().__init__(x, y, world, energy=energy)
 
     @property
     def speed(self):
         return self.world.speed_prey
+
+    @property
+    def energy_max(self):
+        return self.world.max_energy_prey
+
+    @property
+    def reproduction_energy_needed(self):
+        return self.world.reproduction_energy_needed_prey
+
+    @property
+    def reproduction_energy_cost(self):
+        return self.world.reproduction_energy_cost_prey    
+
+    @property
+    def energy_gain(self):
+        return self.world.energy_gain_prey
 
     def runaway(self, world, danger_distance=10):
         """
@@ -187,7 +203,7 @@ class Prey(Agent):
             self.move(world)
 
         # prey gain energy over time (herbivore)
-        self.energy += 2
+        self.energy += self.energy_gain
 
 #############################
 class Predator(Agent):
@@ -198,6 +214,26 @@ class Predator(Agent):
     @property
     def speed(self):
         return self.world.speed_predator
+
+    @property
+    def energy_max(self):
+        return self.world.max_energy_predator
+    
+    @property
+    def reproduction_energy_needed(self):
+        return self.world.reproduction_energy_needed_predator
+
+    @property
+    def reproduction_energy_cost(self):
+        return self.world.reproduction_energy_cost_predator
+
+    @property
+    def energy_gain(self):
+        return self.world.energy_gain_predator
+
+    @property
+    def energy_loss(self):
+        return self.world.energy_loss_predator
 
     def hunt(self, world):
         """
@@ -251,4 +287,4 @@ class Predator(Agent):
             self.move(world)
 
         # predators lose energy when moving
-        self.energy -= 1
+        self.energy -= self.energy_loss

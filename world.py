@@ -31,6 +31,26 @@ class World:
         self.speed_prey = 1.0
         self.speed_predator = 1.5
 
+        # max energy of each agent
+        self.max_energy_prey = 150
+        self.max_energy_predator = 150
+
+        # energy needed for reproduction
+        self.reproduction_energy_needed_prey = 150
+        self.reproduction_energy_needed_predator = 150
+
+        # energy cost for reproduction
+        self.reproduction_energy_cost_prey = 30
+        self.reproduction_energy_cost_predator = 30
+
+        # energy gained by a predator when it eats a prey
+        self.energy_gain_predator = 20
+        # energy gain by a prey at each time step
+        self.energy_gain_prey = 1
+
+        # energy lost by a predator at each time step
+        self.energy_loss_predator = 1
+
         self.color_prey = "blue"
         self.color_predator = "orange"
 
@@ -106,7 +126,7 @@ class World:
                 # if the distance between predator and prey is less than 1.0, the predator gains energy and the prey dies
                 if distance < 1.0:  # if the predator is close enough to the prey
                     # predator gains energy
-                    predator.energy += 20 
+                    predator.energy += predator.energy_gain
                     # the predator make a pause after eating
                     predator.countdown = 3
                     # prey dies
@@ -232,10 +252,10 @@ class World:
         return(
             len(self.preys),
             len(self.predators),
-            N_predators_added,
             N_preys_added,
-            N_predators_removed,
+            N_predators_added,
             N_preys_removed,
+            N_predators_removed,
             self.mean_prey_energy,
             self.mean_predator_energy
         )
