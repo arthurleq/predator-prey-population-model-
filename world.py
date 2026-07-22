@@ -17,12 +17,40 @@ class World:
         # time step of the simulation
         self.time = 0
 
+        # distance at which the agents can reproduce
+        self.distance_reproduction = 1.0
+
+        # distance at which the prey will run away from predators instead of looking for a mate
+        self.distance_danger = 5.0
+
+        # limites for the number of agents in the world
+        self.max_predators = 100
+        self.max_preys = 200
+
+        # speed of the agents in the world
+        self.speed_prey = 1.0
+        self.speed_predator = 1.5
+
         self.color_prey = "blue"
         self.color_predator = "orange"
 
         self.list_predator_to_add = []
         self.list_prey_to_add = []
 
+    @property
+    def mean_prey_energy(self):
+        if not self.preys:
+            return 0
+        return np.mean([prey.energy for prey in self.preys])
+
+    @property
+    def mean_predator_energy(self):
+        if not self.predators:
+            return 0
+        return np.mean([predator.energy for predator in self.predators])
+
+
+    
     # method to add preys to the world
     def add_prey(self, **kwargs):
         """
@@ -33,10 +61,10 @@ class World:
         # if an int is given, we create that many preys with random positions
         for i in range(kwargs.get("number", 1)):
             rand_pos = np.random.rand(2) * [self.width, self.height]
-            self.preys.append(Prey(rand_pos[0], rand_pos[1]))
+            self.preys.append(Prey(rand_pos[0], rand_pos[1], self))
         # if a tuple is given, we create a prey at that position
         if "position" in kwargs:
-            self.preys.append(Prey(kwargs["position"][0], kwargs["position"][1]))
+            self.preys.append(Prey(kwargs["position"][0], kwargs["position"][1], self))
     
     # method to add predators to the world
     def add_predator(self, **kwargs):
@@ -48,10 +76,11 @@ class World:
         # if an int is given, we create that many predators with random positions
         for i in range(kwargs.get("number", 1)):
             rand_pos = np.random.rand(2) * [self.width, self.height]
-            self.predators.append(Predator(rand_pos[0], rand_pos[1]))
+            self.predators.append(Predator(rand_pos[0], rand_pos[1], self))
         # if a tuple is given, we create a predator at that position
         if "position" in kwargs:
-            self.predators.append(Predator(kwargs["position"][0], kwargs["position"][1]))
+            self.predators.append(Predator(kwargs["position"][0], kwargs["position"][1], self))
+        
 
     def remove_all_agents(self):
         """
@@ -83,59 +112,90 @@ class World:
                     # prey dies
                     prey.energy = 0
 
+                    # a predator can only eat one prey at a time
+                    break  
+
 
     # Reproduction method for both predators and preys
     def reproduction(self):
 
-        for predator in self.predators:
-            # if there is another predator close enough
-            for other_predator in self.predators:
-                if predator != other_predator:
-                    # Get the distance between the two predators
-                    distance = predator.get_distance(other_predator, self)[0]
-                    # if the predators are close enough AND both predators have enough energy
-                    if distance < 5.0 and (predator.energy > predator.reproduction_energy_needed and other_predator.energy > other_predator.reproduction_energy_needed):
+        ### Reproduction for predators ###
+        # if the number of predators is less than the maximum number of predators
+        if len(self.predators) < self.max_predators :
 
-                            # both predators lose some energy
-                            predator.energy -= predator.reproduction_energy_cost
-                            other_predator.energy -= other_predator.reproduction_energy_cost
-                            # and a new predator is born
-                            self.list_predator_to_add.append(((predator.x + other_predator.x) / 2, (predator.y + other_predator.y) / 2))
-                            # countdown because they are exausted
-                            # female
-                            predator.countdown = 5
-                            # male
-                            other_predator.countdown = 2
+            for i, predator in enumerate(self.predators):
+                # if there is another predator close enough
+                for other_predator in self.predators[i+1:]:
+               
+                        # Get the distance between the two predators
+                        distance, _, vector_dx_dy = predator.get_distance(other_predator, self)
+                        # if the predators are close enough AND both predators have enough energy
+                        if distance < self.distance_reproduction and (predator.energy > predator.reproduction_energy_needed and other_predator.energy > other_predator.reproduction_energy_needed):
 
-        for prey in self.preys:
-            # if there is another prey close enough
-            for other_prey in self.preys:
-                if prey != other_prey:
-                    distance = prey.get_distance(other_prey, self)[0]
+                                # both predators lose some energy
+                                predator.energy -= predator.reproduction_energy_cost
+                                other_predator.energy -= other_predator.reproduction_energy_cost
+                                # and a new predator is born
+                                x = (predator.x + vector_dx_dy[0] / 2) % self.width
+                                y = (predator.y + vector_dx_dy[1] / 2) % self.height
+                                self.list_predator_to_add.append((x, y))
+                                # countdown because they are exausted
+                                # female
+                                predator.countdown = 5
+                                # male
+                                other_predator.countdown = 2
+
+                                break
+
+        ### Reproduction for preys ###
+        # if the number of preys is less than the maximum number of preys
+        if len(self.preys) < self.max_preys :
+
+            for i, prey in enumerate(self.preys):
+                # if there is another prey close enough
+                for other_prey in self.preys[i+1:]:
+
+                    distance, _, vector_dx_dy = prey.get_distance(other_prey, self)
                     # if the preys are close enough AND both preys have enough energy
-                    if distance < 5.0 and (prey.energy > prey.reproduction_energy_needed and other_prey.energy > other_prey.reproduction_energy_needed):
-                            # new prey is born
-                            self.list_prey_to_add.append(((prey.x + other_prey.x) / 2, (prey.y + other_prey.y) / 2))
+                    if distance < self.distance_reproduction and (prey.energy > prey.reproduction_energy_needed and other_prey.energy > other_prey.reproduction_energy_needed):
+                                # new prey is born (between the two parents)
+                                x = (prey.x + vector_dx_dy[0] / 2) % self.width
+                                y = (prey.y + vector_dx_dy[1] / 2) % self.height
+                                self.list_prey_to_add.append((x, y))
 
-                            # countdown because they are exausted
-                            # female
-                            prey.countdown = 3
-                            # male
-                            other_prey.countdown = 1
+                                # countdown because they are exausted
+                                # female
+                                prey.countdown = 3
+                                # male
+                                other_prey.countdown = 1
 
-                            prey.energy -= prey.reproduction_energy_cost
-                            other_prey.energy -= other_prey.reproduction_energy_cost
+                                prey.energy -= prey.reproduction_energy_cost
+                                other_prey.energy -= other_prey.reproduction_energy_cost
+
+                                break
     
     # Remove dead agents from the world
     def remove_dead(self):
-        # suppression of the dead (energy = 0)
-        for predator in self.predators:
-            if predator.energy <= 0:
-                self.predators.remove(predator)
 
-        for prey in self.preys:
-            if prey.energy <= 0:
-                self.preys.remove(prey)
+        # number of predator removed
+        N_predators_removed = len(self.predators) - sum(predator.energy > 0 for predator in self.predators)
+
+        self.predators = [
+            predator
+            for predator in self.predators
+               if predator.energy > 0
+        ]
+
+        # number of prey removed
+        N_preys_removed = len(self.preys) - sum(prey.energy > 0 for prey in self.preys)
+
+        self.preys = [
+            prey
+            for prey in self.preys
+            if prey.energy > 0
+        ]
+
+        return N_predators_removed, N_preys_removed
 
     def step(self):
         
@@ -153,7 +213,10 @@ class World:
         self.reproduction()
 
         # remove dead agents
-        self.remove_dead()
+        N_predators_removed, N_preys_removed = self.remove_dead()
+
+        N_predators_added = len(self.list_predator_to_add)
+        N_preys_added = len(self.list_prey_to_add)
 
         # add new agents to the world
         for position in self.list_predator_to_add:
@@ -165,3 +228,14 @@ class World:
         self.list_prey_to_add = []
 
         self.time += 1
+
+        return(
+            len(self.preys),
+            len(self.predators),
+            N_predators_added,
+            N_preys_added,
+            N_predators_removed,
+            N_preys_removed,
+            self.mean_prey_energy,
+            self.mean_predator_energy
+        )
