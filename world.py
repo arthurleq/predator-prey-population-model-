@@ -34,9 +34,16 @@ class World:
         # distance at which a predator can kill a prey, or eat a carcass
         self.distance_eating = 1.0
 
-        # limites for the number of agents in the world
+        # perception radius: an agent doesn't perceive the agents and carcasses further away
+        self.perception_prey = 10.0
+        self.perception_predator = 20.0
+
+        # carrying capacity of the preys (logistic growth): a newborn prey survives
+        # with a probability 1 - (number of preys) / carrying_capacity_prey
+        self.carrying_capacity_prey = 200
+
+        # limit for the number of predators in the world
         self.max_predators = 100
-        self.max_preys = 200
 
         # speed of the agents in the world
         self.speed_prey = 1.0
@@ -286,7 +293,7 @@ class World:
         self.carcasses.countdown -= 1
         self.carcasses.keep((self.carcasses.countdown > 0) & (self.carcasses.energy > 0))
 
-    def mating(self, population, max_agents, energy_needed, energy_cost, countdowns):
+    def mating(self, population, energy_needed, energy_cost, countdowns):
         """
         Reproduction of the agents of one population.
 
@@ -297,10 +304,6 @@ class World:
         return: positions of the newborns (array (n, 2))
         """
         newborns = np.empty((0, 2))
-
-        # if the number of agents is less than the maximum number of agents
-        if len(population) >= max_agents:
-            return newborns
 
         # only the agents with enough energy can reproduce
         candidates = np.flatnonzero(population.energy >= energy_needed)
@@ -345,20 +348,32 @@ class World:
     # Reproduction method for both predators and preys
     def reproduction(self):
         """Return the positions of the newborn preys and predators."""
-        newborn_predators = self.mating(
-            self.predators,
-            self.max_predators,
-            self.reproduction_energy_needed_predator,
-            self.reproduction_energy_cost_predator,
-            countdowns=(5, 2),
-        )
+
+        ### Reproduction for predators ###
+        # if the number of predators is less than the maximum number of predators
+        newborn_predators = np.empty((0, 2))
+        if len(self.predators) < self.max_predators:
+            newborn_predators = self.mating(
+                self.predators,
+                self.reproduction_energy_needed_predator,
+                self.reproduction_energy_cost_predator,
+                countdowns=(5, 2),
+            )
+
+        ### Reproduction for preys ###
         newborn_preys = self.mating(
             self.preys,
-            self.max_preys,
             self.reproduction_energy_needed_prey,
             self.reproduction_energy_cost_prey,
             countdowns=(3, 1),
         )
+        # logistic growth: the more preys there are, the less resources for the newborns,
+        # which survive with a probability 1 - (number of preys) / carrying_capacity_prey
+        # (the parents pay the cost of the reproduction anyway)
+        n_preys = np.sum(self.preys.energy > 0)
+        survival = max(0.0, 1 - n_preys / self.carrying_capacity_prey)
+        newborn_preys = newborn_preys[np.random.rand(len(newborn_preys)) < survival]
+
         return newborn_preys, newborn_predators
 
     # Remove dead agents from the world

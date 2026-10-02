@@ -21,8 +21,9 @@ from tqdm import tqdm
 # shape of an agent: an arrow head pointing along the x axis, in units of the agent size
 ARROW = np.array([[1.0, 0.0], [-0.7, 0.6], [-0.35, 0.0], [-0.7, -0.6]])
 
-# size of the video in pixels (multiples of 16, as expected by the video codec)
-WIDTH_PX, HEIGHT_PX, DPI = 1280, 640, 100
+# size of the figure in inches: the size of the video in pixels is FIGSIZE * dpi
+# (e.g. 960 x 480 pixels for dpi=75; the codec expects even numbers of pixels)
+FIGSIZE = (12.8, 6.4)
 
 
 def arrows(pos, direction, size):
@@ -51,12 +52,13 @@ class Renderer:
         carcass_color="#8c4614",
         prey_size=1.2,
         predator_size=2.2,
+        dpi=75,
     ):
         self.prey_size = prey_size
         self.predator_size = predator_size
 
         # the figure is drawn off-screen (no window, nothing displayed in the notebook)
-        self.fig = Figure(figsize=(WIDTH_PX / DPI, HEIGHT_PX / DPI), dpi=DPI)
+        self.fig = Figure(figsize=FIGSIZE, dpi=dpi)
         self.canvas = FigureCanvasAgg(self.fig)
         grid = self.fig.add_gridspec(
             2, 2, width_ratios=[1.2, 1],
@@ -170,12 +172,15 @@ class Renderer:
         return np.asarray(self.canvas.buffer_rgba())
 
 
-def render_video(frames, history, world_width, world_height, output_path="./plot/world.mp4", fps=30, every=1, **style):
+def render_video(frames, history, world_width, world_height, output_path="./plot/world.mp4", fps=30, every=1,
+                 quality=4, **style):
     """
     Draw the simulation and write it as an MP4 video, one image at a time (the memory used stays constant).
 
-    every: draw one time step out of `every` (e.g. 2 makes the video twice shorter)
-    style: options of Renderer (max_energy_predator, colors, size of the agents)
+    every: draw one time step out of `every` (e.g. 2 makes the video twice shorter, and the file twice lighter)
+    quality: quality of the compression, from 0 (smallest file) to 10 (best image);
+             below 4, blotches appear around the agents
+    style: options of Renderer (dpi = resolution, max_energy_predator, colors, size of the agents)
     return: the path of the video
     """
     # imported here, so that Renderer can be used without ffmpeg (e.g. to save a single image)
@@ -187,7 +192,8 @@ def render_video(frames, history, world_width, world_height, output_path="./plot
     os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
 
     writer = imageio_ffmpeg.write_frames(
-        output_path, (WIDTH_PX, HEIGHT_PX), pix_fmt_in="rgba", fps=fps, codec="libx264", quality=7
+        output_path, renderer.canvas.get_width_height(), pix_fmt_in="rgba", fps=fps, codec="libx264",
+        quality=quality, macro_block_size=2,
     )
     writer.send(None)  # start the writer
     try:
