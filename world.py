@@ -22,6 +22,11 @@ class World:
         self.prey_policy = prey_heuristic
         self.predator_policy = predator_heuristic
 
+        # what happened during the last time step, to analyse the behaviour of the predators:
+        # position of the preys killed and id of their killer, carcass eaten by each predator that ate
+        self.last_kills = dict(pos=np.empty((0, 2)), killer_ids=np.empty(0, dtype=int))
+        self.last_meals = np.empty(0, dtype=int)
+
         # time step of the simulation
         self.time = 0
 
@@ -70,6 +75,9 @@ class World:
         self.carcass_duration = 30
         # energy taken from a carcass by each predator at each time step
         self.carcass_eating_rate = 10
+        # largest share of a carcass (of the energy of the prey when it died) that one predator can take:
+        # the rest is left to the other predators
+        self.carcass_max_share = 0.5
 
         # energy gain by a prey at each time step
         self.energy_gain_prey = 1
@@ -192,6 +200,7 @@ class World:
         """
         Move the agents along their direction.
 
+        speed: speed of all the agents, or array with the speed of each agent
         immobile: optional mask of the agents that can't move during this step (e.g. predators eating a carcass)
         """
         # if the agent is in pause (giving birth), it doesn't move
@@ -202,7 +211,8 @@ class World:
         if immobile is not None:
             moving &= ~immobile
         direction = population.direction[moving]
-        velocity = speed * np.column_stack([np.cos(direction), np.sin(direction)])
+        speed = np.broadcast_to(speed, len(population))[moving]
+        velocity = speed[:, None] * np.column_stack([np.cos(direction), np.sin(direction)])
 
         # toric world: if the agent goes out of the world, it appears on the other side
         population.pos[moving] = (population.pos[moving] + velocity) % [self.width, self.height]
@@ -216,6 +226,7 @@ class World:
         can_hunt: mask of the predators allowed to hunt (the ones eating a carcass don't hunt)
         """
         preys, predators = self.preys, self.predators
+        self.last_kills = dict(pos=np.empty((0, 2)), killer_ids=np.empty(0, dtype=int))
         if len(preys) == 0 or len(predators) == 0:
             return
 
@@ -226,7 +237,7 @@ class World:
 
         # predators are handled one after the other, so that a prey can only be killed once
         alive = preys.energy > 0
-        killed = []
+        killed, killers = [], []
         for i in np.flatnonzero(in_reach.any(axis=1) & can_hunt):
             # a prey already killed during this step can't be killed again
             candidates = np.flatnonzero(in_reach[i] & alive)
@@ -235,18 +246,40 @@ class World:
             # a predator can only kill one prey at a time: the closest one
             prey = candidates[distance[i, candidates].argmin()]
             killed.append(prey)
+            killers.append(i)
             alive[prey] = False
 
         killed = np.array(killed, dtype=int)
+        self.last_kills = dict(pos=preys.pos[killed].copy(), killer_ids=predators.ids[np.array(killers, dtype=int)])
         # the dead preys become carcasses: their energy is kept as a reserve
         self.carcasses.add(preys.pos[killed], preys.energy[killed], self.carcass_duration)
         # preys die
         preys.energy[killed] = 0
 
+    def carcass_share_left(self):
+        """
+        Part of its share that each predator has not taken yet from each carcass, array (n_predators, n_carcasses):
+        its share (carcass_max_share of the energy of the prey when it died) minus what it already took.
+        """
+        predators, carcasses = self.predators, self.carcasses
+        share = self.carcass_max_share * carcasses.initial_energy[None, :]
+        already_taken = np.where(
+            predators.meal_carcass[:, None] == carcasses.ids[None, :], predators.meal_eaten[:, None], 0.0
+        )
+        return np.maximum(share - already_taken, 0)
+
+    def carcass_allowance(self):
+        """
+        Energy that each predator can still take from each carcass, array (n_predators, n_carcasses):
+        the part of its share it has not taken yet, and no more than the energy left in the carcass.
+        """
+        return np.minimum(self.carcass_share_left(), self.carcasses.energy[None, :])
+
     def carcass_eaten(self):
         """
-        For each predator, index of the carcass it is eating (the closest one within reach), or -1.
-        A predator that is full doesn't eat, so it is free to leave the carcass.
+        For each predator, index of the carcass it is eating, or -1: the closest carcass within reach
+        from which it can still take energy.
+        A predator that is full, or that took its share of the carcass, doesn't eat, so it is free to leave.
         """
         n = len(self.predators)
         carcass = np.full(n, -1)
@@ -255,6 +288,7 @@ class World:
 
         dx, dy = self.displacement(self.predators.pos, self.carcasses.pos)
         distance = np.hypot(dx, dy)
+        distance[self.carcass_allowance() <= 0] = np.inf
         closest = distance.argmin(axis=1)
         eating = (
             (distance[np.arange(n), closest] < self.distance_eating)
@@ -265,18 +299,23 @@ class World:
 
     def feeding(self):
         """
-        The predators on a carcass take energy from its reserve (carcass_eating_rate each, at most).
+        The predators on a carcass take energy from its reserve (carcass_eating_rate each, at most,
+        and no more than their share of the carcass).
         If the reserve is not enough for all of them, it is shared in proportion to what each one can eat.
         """
         carcass = self.carcass_eaten()
         eaters = np.flatnonzero(carcass >= 0)
+        self.last_meals = carcass[eaters]
         if len(eaters) == 0:
             return
         carcass = carcass[eaters]
         n_carcasses = len(self.carcasses)
 
-        # what each predator can eat (it can't go over its max energy)
-        wanted = np.minimum(self.carcass_eating_rate, self.max_energy_predator - self.predators.energy[eaters])
+        # what each predator can eat (it can't go over its max energy, nor over its share of the carcass)
+        wanted = np.minimum(
+            np.minimum(self.carcass_eating_rate, self.max_energy_predator - self.predators.energy[eaters]),
+            self.carcass_share_left()[eaters, carcass],
+        )
         # part of the demand that each carcass can satisfy
         demand = np.bincount(carcass, weights=wanted, minlength=n_carcasses)
         ratio = np.minimum(1, self.carcasses.energy / np.maximum(demand, 1e-12))
@@ -287,6 +326,12 @@ class World:
             self.carcasses.energy - np.bincount(carcass, weights=eaten, minlength=n_carcasses),
             0
         )
+
+        # remember what each predator took from this carcass
+        ids = self.carcasses.ids[carcass]
+        same_meal = self.predators.meal_carcass[eaters] == ids
+        self.predators.meal_eaten[eaters] = np.where(same_meal, self.predators.meal_eaten[eaters], 0) + eaten
+        self.predators.meal_carcass[eaters] = ids
 
     def rotting(self):
         """The carcasses disappear when their countdown reaches 0 or when their reserve is empty."""
@@ -340,6 +385,9 @@ class World:
         # countdown because they are exausted
         population.countdown[females] = countdowns[0]
         population.countdown[males] = countdowns[1]
+
+        population.reproductions[females] += 1
+        population.reproductions[males] += 1
 
         # new agents are born (between the two parents)
         vector_dx_dy = self.wrap_vector(population.pos[males] - population.pos[females])
@@ -395,6 +443,8 @@ class World:
 
         prey_actions, predator_actions: for each agent (in the order of the population),
         how much it turns, as a proportion of max_angular_change in [-1, 1].
+        The predator actions can have a second column: the speed of each predator,
+        as a proportion of speed_predator in [0, 1] (full speed if it is not given).
         If they are not given, they are computed by self.prey_policy and self.predator_policy.
         """
 
@@ -404,14 +454,21 @@ class World:
         if predator_actions is None:
             predator_actions = self.predator_policy(self)
 
+        predator_actions = np.asarray(predator_actions, dtype=float)
+        if predator_actions.ndim == 2:
+            predator_turns = predator_actions[:, 0]
+            predator_speeds = self.speed_predator * np.clip(predator_actions[:, 1], 0, 1)
+        else:
+            predator_turns, predator_speeds = predator_actions, self.speed_predator
+
         # the predators on a carcass stay immobile while they eat (and don't hunt)
         eating_carcass = self.carcass_eaten() >= 0
 
         # move the agents
         self.turn(self.preys, prey_actions)
-        self.turn(self.predators, predator_actions)
+        self.turn(self.predators, predator_turns)
         self.move(self.preys, self.speed_prey)
-        self.move(self.predators, self.speed_predator, immobile=eating_carcass)
+        self.move(self.predators, predator_speeds, immobile=eating_carcass)
 
         # prey gain energy over time (herbivore)
         self.preys.energy = np.clip(self.preys.energy + self.energy_gain_prey, 0, self.max_energy_prey)

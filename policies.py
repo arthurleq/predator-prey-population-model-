@@ -27,13 +27,14 @@ def wander(n):
     return np.random.uniform(-1, 1, n)
 
 
-def closest(world, pos_from, pos_to, radius=np.inf, same_agents=False):
+def closest(world, pos_from, pos_to, radius=np.inf, same_agents=False, allowed=None):
     """
     For each position of pos_from, find the closest position of pos_to within radius (toric world).
 
     pos_from: array (n, 2), pos_to: array (m, 2)
     radius: perception radius, nothing further away is seen
     same_agents: True if pos_from and pos_to are the same agents, so that an agent doesn't target itself
+    allowed: optional mask (n, m) of the targets that each position can choose
     return: distance (inf if nothing is perceived), direction (in radians)
     """
     n = len(pos_from)
@@ -44,6 +45,8 @@ def closest(world, pos_from, pos_to, radius=np.inf, same_agents=False):
     distance = np.hypot(dx, dy)
     if same_agents:
         np.fill_diagonal(distance, np.inf)
+    if allowed is not None:
+        distance[~allowed] = np.inf
     distance[distance > radius] = np.inf
 
     rows = np.arange(n)
@@ -97,7 +100,7 @@ def predator_heuristic(world):
     1. If the predator has enough energy to reproduce, it goes towards the closest perceived predator
        that has enough energy too
     2. If it doesn't have enough energy to reproduce, it goes to the closest perceived food:
-       a prey to hunt or a carcass to eat (possibly shared with other predators)
+       a prey to hunt or a carcass it can still eat from (possibly shared with other predators)
     3. If there is no target, it wanders randomly
     """
     preys, predators, carcasses = world.preys, world.predators, world.carcasses
@@ -114,10 +117,13 @@ def predator_heuristic(world):
     found = np.isfinite(distance)
     target[mates[found]] = direction[found]
 
-    # the others go to the closest food (prey or carcass)
+    # the others go to the closest food: a prey, or a carcass they can still eat from (see World.carcass_allowance)
     hunters = np.flatnonzero(~can_reproduce)
     food = np.concatenate([preys.pos, carcasses.pos])
-    distance, direction = closest(world, predators.pos[hunters], food, radius)
+    allowed = np.concatenate(
+        [np.ones((len(hunters), len(preys)), dtype=bool), world.carcass_allowance()[hunters] > 0], axis=1
+    )
+    distance, direction = closest(world, predators.pos[hunters], food, radius, allowed=allowed)
     found = np.isfinite(distance)
     target[hunters[found]] = direction[found]
 

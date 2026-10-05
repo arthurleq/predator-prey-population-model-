@@ -28,7 +28,8 @@ class Group:
     def keep(self, mask):
         """Keep only the entities for which mask is True (used to remove dead agents)."""
         for name, values in list(vars(self).items()):
-            setattr(self, name, values[mask])
+            if isinstance(values, np.ndarray):
+                setattr(self, name, values[mask])
 
 
 class Population(Group):
@@ -47,6 +48,18 @@ class Population(Group):
         # countdown is used to pause the agent when it is giving birth
         self.countdown = np.empty(0, dtype=int)
 
+        # number of times each agent has reproduced
+        self.reproductions = np.empty(0, dtype=int)
+
+        # unique identifier of each agent, to follow it over time (the agents stay sorted by id)
+        self.ids = np.empty(0, dtype=int)
+        self.next_id = 0
+
+        # (predators only) id of the carcass the agent is eating or ate last (-1 if none),
+        # and the energy it took from it: a predator can only take a share of each carcass
+        self.meal_carcass = np.empty(0, dtype=int)
+        self.meal_eaten = np.empty(0)
+
     def add(self, pos, direction, energy):
         """
         Add agents to the population.
@@ -55,10 +68,16 @@ class Population(Group):
         direction: array (n,) of directions (in radians)
         energy: array (n,) of energies
         """
+        n = len(pos)
         self.pos = np.concatenate([self.pos, pos])
         self.direction = np.concatenate([self.direction, wrap_angle(direction)])
         self.energy = np.concatenate([self.energy, energy])
-        self.countdown = np.concatenate([self.countdown, np.zeros(len(pos), dtype=int)])
+        self.countdown = np.concatenate([self.countdown, np.zeros(n, dtype=int)])
+        self.reproductions = np.concatenate([self.reproductions, np.zeros(n, dtype=int)])
+        self.ids = np.concatenate([self.ids, np.arange(self.next_id, self.next_id + n)])
+        self.next_id += n
+        self.meal_carcass = np.concatenate([self.meal_carcass, np.full(n, -1)])
+        self.meal_eaten = np.concatenate([self.meal_eaten, np.zeros(n)])
 
 
 class Carcasses(Group):
@@ -73,11 +92,16 @@ class Carcasses(Group):
         # position (x, y) of each carcass
         self.pos = np.empty((0, 2))
 
-        # energy left in the carcass
+        # energy left in the carcass, and energy of the prey when it died
         self.energy = np.empty(0)
+        self.initial_energy = np.empty(0)
 
         # number of time steps before the carcass disappears
         self.countdown = np.empty(0, dtype=int)
+
+        # unique identifier of each carcass
+        self.ids = np.empty(0, dtype=int)
+        self.next_id = 0
 
     def add(self, pos, energy, countdown):
         """
@@ -87,6 +111,10 @@ class Carcasses(Group):
         energy: array (n,) of energy reserves
         countdown: number of time steps before they disappear
         """
+        n = len(pos)
         self.pos = np.concatenate([self.pos, pos])
         self.energy = np.concatenate([self.energy, energy])
-        self.countdown = np.concatenate([self.countdown, np.full(len(pos), countdown, dtype=int)])
+        self.initial_energy = np.concatenate([self.initial_energy, energy])
+        self.countdown = np.concatenate([self.countdown, np.full(n, countdown, dtype=int)])
+        self.ids = np.concatenate([self.ids, np.arange(self.next_id, self.next_id + n)])
+        self.next_id += n

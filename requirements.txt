@@ -1,0 +1,14 @@
+# simulation
+numpy==2.4.6
+# plots and video
+matplotlib==3.11.2
+imageio-ffmpeg==0.6.0
+pillow==12.3.0
+# progress bars
+tqdm==4.70.1
+# notebook kernel (VS Code / Jupyter)
+ipykernel==7.4.0
+# neural network: PyTorch built for NVIDIA GPUs (CUDA 12.8)
+# (without a NVIDIA GPU: remove the index line and use torch==2.11.0)
+--extra-index-url https://download.pytorch.org/whl/cu128
+torch==2.11.0+cu128
